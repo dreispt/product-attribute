@@ -6,6 +6,8 @@ import logging
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests.common import TransactionCase
 
+from .. import post_init_hook
+
 _logger = logging.getLogger(__name__)
 
 
@@ -80,3 +82,37 @@ class TestProductState(TransactionCase):
         self.created_product.state = "Test"
         copied_product = self.created_product.copy()
         self.assertEqual(copied_product.product_state_id, self.state_sellable)
+
+    def test_06_post_init_hook(self):
+        """
+        Create a product without state.
+        Run the post init hook.
+        It should get the default state.
+        """
+        product = self.product_obj.create(
+            {"name": "Product without state", "product_state_id": False}
+        )
+        self.assertFalse(product.product_state_id)
+        self.assertFalse(product.state)
+        post_init_hook(self.env)
+        product.invalidate_recordset()
+        self.assertEqual(product.product_state_id, self.state_sellable)
+        self.assertEqual(product.state, "sellable")
+
+    def test_07_post_init_hook_uses_default_state(self):
+        """
+        Change the default state.
+        Create a product without state and run the post init hook.
+        It should get the new default state, not the sellable one.
+        """
+        self.state_sellable.default = False
+        default_state = self.ProductState.create(
+            {"name": "Custom Default", "code": "custom_default", "default": True}
+        )
+        product = self.product_obj.create(
+            {"name": "Product without state", "product_state_id": False}
+        )
+        post_init_hook(self.env)
+        product.invalidate_recordset()
+        self.assertEqual(product.product_state_id, default_state)
+        self.assertEqual(product.state, "custom_default")
